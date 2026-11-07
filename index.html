@@ -5,6 +5,14 @@
 </head>
 <body>
   <h1>Flappy Lab</h1>
-  <p>A game where I will train a bird to fly.</p>
+  <p>My own fun version of Flappy bird where i train ai to play and compete along with it </p>
+  <canvas id="game" width="400" height="500" style="background: skyblue;"></canvas>
+  <script>
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "yellow";
+  ctx.fillRect(80, 200, 25, 25);
+</script>
 </body>
 </html>
