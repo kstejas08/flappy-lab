@@ -14,6 +14,17 @@
         style="background: #eeeeee;"></canvas>
 <button onclick="testCurrentBrain()">Test current AI</button>
 <p id="trainingStatus">Training has not started.</p>
+<button onclick="trainOneGeneration()">
+  Train one generation
+</button>
+<label>
+  Load saved AI:
+  <input type="file" accept=".json" onchange="loadBrainFile(this)">
+</label>
+<button onclick="testUnseenApples()">Test 100 new apples</button>
+
+<button onclick="startChallenge()">Play 20 apples against AI</button>
+<p id="challengeStatus">Load your saved AI before starting a challenge.</p>
 
 <script>
   const canvas = document.getElementById("game");
@@ -27,6 +38,10 @@
   let moveLeft = false;
   let aiMode = false;
   let moveRight = false;
+
+  let challengeDrops = null;
+  let challengeIndex = 0;
+  let challengeAIScore = 0;
 
   function drawNetwork(inputs, decision) {
   const network = document.getElementById("network");
@@ -107,7 +122,8 @@
   ctx.font="20px Arial";
   ctx.fillText("Score: " + score, 15, 30);
 
-  ctx.fillText("Lives: " + lives, 290, 30);
+  const counterLabel = challengeDrops !== null ? "Left: " : "Lives: ";
+ctx.fillText(counterLabel + lives, 290, 30);
   const inputs = getInputs();
   const decision = runBrain(brain, inputs);
   drawNetwork(inputs, decision);
@@ -121,7 +137,7 @@ ctx.fillText(
 );
 
 ctx.font = "14px Arial";
-ctx.fillText("Untrained AI suggests: " + decision.action, 10, 70);
+ctx.fillText("AI suggests: " + decision.action, 10, 70);
 ctx.font = "20px Arial";
 
   if(lives===0) {
@@ -130,6 +146,9 @@ ctx.font = "20px Arial";
  }
 document.addEventListener("keydown", function(event) {
   if (event.key.toLowerCase()==="r" && lives===0){
+    challengeDrops = null;
+document.getElementById("challengeStatus").textContent =
+  "Practice mode.";
     basketX=160;
     score=0;
     lives=3;
@@ -183,6 +202,7 @@ function createBrain() {
 }
 
 let brain = createBrain();
+let generation = 0;
 const trainingDrops = Array.from(
   { length: 20},
   () => 10 + Math.random() * (canvas.width - 20)
@@ -283,12 +303,187 @@ function evaluateBrain(model,drops) {
   return { catches: catches, fitness: fitness };
 }
 
+function mutateBrain(parent) {
+  function mutateValues(values) {
+    return values.map(function(value) {
+      if (Array.isArray(value)) {
+        return mutateValues(value);
+      }
+
+      if (Math.random() < 0.2) {
+        return value + randomWeight() * 0.3;
+      }
+
+      return value;
+    });
+  }
+
+  return {
+    hiddenWeights: mutateValues(parent.hiddenWeights),
+    hiddenBiases: mutateValues(parent.hiddenBiases),
+    outputWeights: mutateValues(parent.outputWeights),
+    outputBiases: mutateValues(parent.outputBiases)
+  };
+}
+
+function trainOneGeneration() {
+  const before = evaluateBrain(brain, trainingDrops);
+  let bestBrain = brain;
+  let bestResult = before;
+
+  for (let candidate = 0; candidate < 16; candidate++) {
+    const child = candidate < 2
+      ? createBrain()
+      : mutateBrain(brain);
+
+    const result = evaluateBrain(child, trainingDrops);
+
+    if (result.fitness > bestResult.fitness) {
+      bestBrain = child;
+      bestResult = result;
+    }
+  }
+
+  brain = bestBrain;
+  generation += 1;
+
+  document.getElementById("trainingStatus").textContent =
+    "Generation " + generation +
+    " | Before: " + before.catches +
+    "/20 | Best: " + bestResult.catches + "/20";
+
+  draw();
+} 
+
+async function loadBrainFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  try {
+    const saved = JSON.parse(await file.text());
+
+    function validNumbers(values, count) {
+      return Array.isArray(values) &&
+        values.length === count &&
+        values.every(Number.isFinite);
+    }
+
+    function validMatrix(matrix, rows, columns) {
+      return Array.isArray(matrix) &&
+        matrix.length === rows &&
+        matrix.every(row => validNumbers(row, columns));
+    }
+
+    const model = saved.brain;
+
+    if (
+      !model ||
+      !validMatrix(model.hiddenWeights, 6, 3) ||
+      !validNumbers(model.hiddenBiases, 6) ||
+      !validMatrix(model.outputWeights, 3, 6) ||
+      !validNumbers(model.outputBiases, 3) ||
+      !validNumbers(saved.trainingDrops, 20) ||
+      !Number.isInteger(saved.generation) ||
+      saved.generation < 0
+    ) {
+      throw new Error("This file does not match our network format.");
+    }
+
+    brain = model;
+    generation = saved.generation;
+    trainingDrops.splice(0, trainingDrops.length, ...saved.trainingDrops);
+
+    const result = evaluateBrain(brain, trainingDrops);
+
+    document.getElementById("trainingStatus").textContent =
+      "Loaded generation " + generation +
+      " | Training catches: " + result.catches + "/20";
+
+    draw();
+  } catch (error) {
+    document.getElementById("trainingStatus").textContent =
+      "Could not load AI: " + error.message;
+  }
+
+  input.value = "";
+}
+
+function testUnseenApples() {
+  const unseenDrops = Array.from(
+    { length: 100 },
+    () => 10 + Math.random() * (canvas.width - 20)
+  );
+
+  const result = evaluateBrain(brain, unseenDrops);
+
+  document.getElementById("trainingStatus").textContent =
+    "Unseen test: caught " + result.catches + " of 100 apples.";
+}
+
 function testCurrentBrain() {
   const result = evaluateBrain( brain, trainingDrops);
 
   document.getElementById("trainingStatus").textContent = 
   "Current network caught " + result.catches + " of 20 apples.";
 }
+function startChallenge() {
+  const wasGameOver = lives === 0;
+  challengeDrops = null;
+document.getElementById("challengeStatus").textContent =
+  "Practice mode. Start a new challenge when ready.";
+
+  challengeDrops = Array.from(
+    { length: 20 },
+    () => 10 + Math.random() * (canvas.width - 20)
+  );
+
+  challengeAIScore = evaluateBrain(brain, challengeDrops).catches;
+  challengeIndex = 0;
+
+  aiMode = false;
+  moveLeft = false;
+  moveRight = false;
+  basketX = 160;
+  score = 0;
+  lives = 20;
+  appleX = challengeDrops[0];
+  appleY = -10;
+
+  document.getElementById("modeButton").textContent = "Switch to AI";
+  document.getElementById("challengeStatus").textContent =
+    "Your turn! Catch as many of the 20 apples as possible.";
+
+  if (wasGameOver) update();
+}
+
+function finishApple(caught) {
+  if (caught) score += 1;
+
+  if (challengeDrops !== null) {
+    challengeIndex += 1;
+    lives = challengeDrops.length - challengeIndex;
+
+    if (lives === 0) {
+      let winner = "Draw!";
+      if (score > challengeAIScore) winner = "You win!";
+      if (score < challengeAIScore) winner = "AI wins!";
+
+      document.getElementById("challengeStatus").textContent =
+        "You: " + score + "/20 | AI: " +
+        challengeAIScore + "/20 | " + winner;
+
+      return;
+    }
+
+    appleX = challengeDrops[challengeIndex];
+  } else {
+    if (!caught) lives -= 1;
+    appleX = 10 + Math.random() * (canvas.width - 20);
+  }
+
+  appleY = -10;
+}
+
 function toggleMode() {
   const wasGameOver = lives === 0;
 
@@ -309,39 +504,34 @@ function toggleMode() {
   }
 }
 function update() {
-  appleY=appleY+2;
+  appleY = appleY + 2;
   let action = "stay";
 
   if (aiMode) {
     action = runBrain(brain, getInputs()).action;
   } else {
-    if (moveLeft && !moveRight) action="left";
+    if (moveLeft && !moveRight) action = "left";
     if (moveRight && !moveLeft) action = "right";
   }
 
   moveBasket(action);
 
-  if (
-    appleY+10 >= 460 &&
-    appleY-10 <= 480 &&
-    appleX+10 >= basketX &&
-    appleX-10 <= basketX + 80
-){
-  score=score +1;
-  appleY=-10;
-  appleX=10+Math.random()*(canvas.width-20);
-}
+  const caught =
+    appleY + 10 >= 460 &&
+    appleY - 10 <= 480 &&
+    appleX + 10 >= basketX &&
+    appleX - 10 <= basketX + 80;
 
-  if (appleY > canvas.height + 10) {
-    lives=lives-1;
-    appleY=-10;
-    appleX=10+Math.random()*(canvas.width-20);
+  if (caught) {
+    finishApple(true);
+  } else if (appleY > canvas.height + 10) {
+    finishApple(false);
   }
 
   draw();
 
-  if (lives>0) {
-  requestAnimationFrame(update);
+  if (lives > 0) {
+    requestAnimationFrame(update);
   }
 }
 update();
