@@ -7,7 +7,15 @@
   <h1>Catch the apple</h1>
   <p>My own fun version of Catch the apple where i train ai to play and players compete along with it </p>
   <canvas id="game" width="400" height="500" style="background: skyblue;"></canvas>
-  <script>
+  <button id="modeButton" onclick="toggleMode()">
+  Switch to AI
+</button>
+<canvas id="network" width="480" height="500"
+        style="background: #eeeeee;"></canvas>
+<button onclick="testCurrentBrain()">Test current AI</button>
+<p id="trainingStatus">Training has not started.</p>
+
+<script>
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
 
@@ -17,8 +25,74 @@
   let score=0;
   let lives = 3;
   let moveLeft = false;
+  let aiMode = false;
   let moveRight = false;
 
+  function drawNetwork(inputs, decision) {
+  const network = document.getElementById("network");
+  const pen = network.getContext("2d");
+  pen.clearRect(0, 0, network.width, network.height);
+
+  const layers = [inputs, decision.hidden, decision.outputs];
+  const columns = [70, 230, 390];
+
+  function nodeY(index, count) {
+    return 100 + (index + 1) * 320 / (count + 1);
+  }
+
+  // Draw connections using the current brain's actual weights.
+  for (let layer = 0; layer < 2; layer++) {
+    const weights = layer === 0
+      ? brain.hiddenWeights
+      : brain.outputWeights;
+
+    for (let target = 0; target < layers[layer + 1].length; target++) {
+      for (let source = 0; source < layers[layer].length; source++) {
+        const weight = weights[target][source];
+
+        pen.strokeStyle = weight >= 0 ? "#26804a" : "#bb4455";
+        pen.lineWidth = 0.5 + Math.min(3, Math.abs(weight));
+
+        pen.beginPath();
+        pen.moveTo(
+          columns[layer],
+          nodeY(source, layers[layer].length)
+        );
+        pen.lineTo(
+          columns[layer + 1],
+          nodeY(target, layers[layer + 1].length)
+        );
+        pen.stroke();
+      }
+    }
+  }
+
+  // Draw neurons using their actual activation values.
+  for (let layer = 0; layer < layers.length; layer++) {
+    for (let node = 0; node < layers[layer].length; node++) {
+      const value = layers[layer][node];
+      const y = nodeY(node, layers[layer].length);
+
+      pen.fillStyle = value >= 0 ? "#26804a" : "#bb4455";
+      pen.globalAlpha = 0.2 + Math.abs(value) * 0.8;
+      pen.beginPath();
+      pen.arc(columns[layer], y, 16, 0, Math.PI * 2);
+      pen.fill();
+      pen.globalAlpha = 1;
+
+      pen.fillStyle = "black";
+      pen.font = "12px Arial";
+      pen.fillText(value.toFixed(2), columns[layer] - 15, y + 32);
+    }
+  }
+
+  pen.fillStyle = "black";
+  pen.font = "16px Arial";
+  pen.fillText("Inputs", 45, 60);
+  pen.fillText("Hidden", 205, 60);
+  pen.fillText("Outputs", 360, 60);
+  pen.fillText("Chosen action: " + decision.action, 130, 460);
+} 
   function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "saddlebrown";
@@ -34,6 +108,21 @@
   ctx.fillText("Score: " + score, 15, 30);
 
   ctx.fillText("Lives: " + lives, 290, 30);
+  const inputs = getInputs();
+  const decision = runBrain(brain, inputs);
+  drawNetwork(inputs, decision);
+
+ctx.font = "12px Arial";
+ctx.fillText(
+  "Apple X: " + inputs[0].toFixed(2) +
+  " | Apple Y: " + inputs[1].toFixed(2) +
+  " | Basket X: " + inputs[2].toFixed(2),
+  10, 50
+);
+
+ctx.font = "14px Arial";
+ctx.fillText("Untrained AI suggests: " + decision.action, 10, 70);
+ctx.font = "20px Arial";
 
   if(lives===0) {
     ctx.fillText("Game over! Press R to restart.", 60, 250);
@@ -73,12 +162,165 @@ window.addEventListener("blur", function() {
   moveLeft=false;
   moveRight=false;
 })
+function randomWeight() {
+  return Math.random() * 2 - 1;
+}
+
+function createBrain() {
+  return {
+    hiddenWeights: Array.from(
+      { length: 6 },
+      () => Array.from({ length: 3 }, randomWeight)
+    ),
+    hiddenBiases: Array.from({ length: 6 }, randomWeight),
+
+    outputWeights: Array.from(
+      { length: 3 },
+      () => Array.from({ length: 6 }, randomWeight)
+    ),
+    outputBiases: Array.from({ length: 3 }, randomWeight)
+  };
+}
+
+let brain = createBrain();
+const trainingDrops = Array.from(
+  { length: 20},
+  () => 10 + Math.random() * (canvas.width - 20)
+);
+
+function runBrain(model, inputs) {
+  const hidden = model.hiddenWeights.map(function(weights, index) {
+    let total = model.hiddenBiases[index];
+
+    for (let i = 0; i < inputs.length; i++) {
+      total = total + weights[i] * inputs[i];
+    }
+
+    return Math.tanh(total);
+  });
+
+  const outputs = model.outputWeights.map(function(weights, index) {
+    let total = model.outputBiases[index];
+
+    for (let i = 0; i < hidden.length; i++) {
+      total = total + weights[i] * hidden[i];
+    }
+
+    return Math.tanh(total);
+  });
+
+  const bestIndex = outputs.indexOf(Math.max(...outputs));
+
+  return {
+    hidden: hidden,
+    outputs: outputs,
+    action: ["left", "stay", "right"][bestIndex]
+  };
+}
+
+function getInputs() {
+  return [
+    appleX / canvas.width,
+    Math.max(0,Math.min(1, appleY / canvas.height)),
+    (basketX+40) / canvas.width
+  ];
+}
+function moveBasket(action) {
+  if (action==="left") basketX = basketX -4;
+  if (action ==="right") basketX=basketX+4;
+
+  basketX=Math.max(0,Math.min(canvas.width-80,basketX));
+}
+
+function evaluateBrain(model,drops) {
+  let testBasketX = 160;
+  let catches = 0;
+  let fitness = 0;
+
+  for (const dropX of drops) {
+    let dropY = -10;
+    let caught = false;
+
+    while (dropY <= canvas.height + 10) {
+      dropY=dropY +2;
+
+      const inputs = [
+        dropX / canvas.width,
+        Math.max(0, Math.min(1, dropY / canvas.height)),
+        (testBasketX + 40) / canvas.width
+      ];
+
+      const action = runBrain(model, inputs).action;
+
+      if (action === "left") testBasketX -= 4;
+      if (action === "right") testBasketX += 4;
+
+      testBasketX = Math.max(
+        0,
+        Math.min(canvas.width - 80, testBasketX)
+      );
+
+      if (
+        dropY + 10 >= 460 &&
+        dropY - 10 <= 480 &&
+        dropX + 10 >= testBasketX &&
+        dropX - 10 <= testBasketX + 80
+      ) {
+        caught = true;
+        break;
+      }
+    }
+
+    if (caught) {
+      catches +=1;
+      fitness += 100;
+    }
+
+    const distance = Math.abs(dropX - (testBasketX + 40));
+    fitness += 1- distance / canvas.width;
+  }
+
+  return { catches: catches, fitness: fitness };
+}
+
+function testCurrentBrain() {
+  const result = evaluateBrain( brain, trainingDrops);
+
+  document.getElementById("trainingStatus").textContent = 
+  "Current network caught " + result.catches + " of 20 apples.";
+}
+function toggleMode() {
+  const wasGameOver = lives === 0;
+
+  aiMode = !aiMode;
+  moveLeft = false;
+  moveRight = false;
+
+  basketX = 160;
+  appleX=10+Math.random()*(canvas.width-20);
+  appleY=-10;
+  score=0;
+  lives=3;
+
+  document.getElementById("modeButton").textContent = aiMode ? "Switch to Human" : "Switch to AI";
+
+  if (wasGameOver) {
+    update();
+  }
+}
 function update() {
   appleY=appleY+2;
-  if (moveLeft) basketX = basketX-4;
-  if (moveRight) basketX=basketX+4;
+  let action = "stay";
 
-  basketX=Math.max(0, Math.min(canvas.width-80, basketX));
+  if (aiMode) {
+    action = runBrain(brain, getInputs()).action;
+  } else {
+    if (moveLeft && !moveRight) action="left";
+    if (moveRight && !moveLeft) action = "right";
+  }
+
+  moveBasket(action);
+
   if (
     appleY+10 >= 460 &&
     appleY-10 <= 480 &&
@@ -100,7 +342,7 @@ function update() {
 
   if (lives>0) {
   requestAnimationFrame(update);
-}
+  }
 }
 update();
 </script>
