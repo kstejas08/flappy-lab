@@ -391,6 +391,8 @@ async function loadBrainFile(input, automaticData = null) {
 
     brain = model;
     generation = saved.generation;
+    document.getElementById("challengeStatus").textContent =
+  "Saved AI loaded. Ready for a 20-apple challenge!";
     trainingDrops.splice(0, trainingDrops.length, ...saved.trainingDrops);
 
     const result = evaluateBrain(brain, trainingDrops);
