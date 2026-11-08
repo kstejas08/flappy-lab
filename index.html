@@ -355,12 +355,12 @@ function trainOneGeneration() {
   draw();
 } 
 
-async function loadBrainFile(input) {
-  const file = input.files[0];
-  if (!file) return;
+async function loadBrainFile(input, automaticData = null) {
+  const file = input ? input.files[0] : null;
+  if (!file && !automaticData) return;
 
   try {
-    const saved = JSON.parse(await file.text());
+    const saved = automaticData || JSON.parse(await file.text());
 
     function validNumbers(values, count) {
       return Array.isArray(values) &&
@@ -405,7 +405,7 @@ async function loadBrainFile(input) {
       "Could not load AI: " + error.message;
   }
 
-  input.value = "";
+  if (input) input.value= "";
 }
 
 function testUnseenApples() {
@@ -426,6 +426,13 @@ function testCurrentBrain() {
   document.getElementById("trainingStatus").textContent = 
   "Current network caught " + result.catches + " of 20 apples.";
 }
+
+if (generation === 0) {
+  document.getElementById("challengeStatus").textContent =
+    "Load a trained AI or train one before starting a challenge.";
+  return;
+}
+
 function startChallenge() {
   const wasGameOver = lives === 0;
   challengeDrops = null;
@@ -534,7 +541,32 @@ function update() {
     requestAnimationFrame(update);
   }
 }
-update();
+async function startGame() {
+  const controls = document.querySelectorAll("button, input");
+  controls.forEach(control => control.disabled = true);
+
+  document.getElementById("trainingStatus").textContent =
+    "Loading saved AI...";
+
+  try {
+    const response = await fetch("./trained-brain.json");
+
+    if (!response.ok) {
+      throw new Error("Saved AI file could not be downloaded.");
+    }
+
+    const saved = await response.json();
+    await loadBrainFile(null, saved);
+  } catch (error) {
+    document.getElementById("trainingStatus").textContent =
+      "Automatic loading failed. Please use Load saved AI.";
+  } finally {
+    controls.forEach(control => control.disabled = false);
+    update();
+  }
+}
+
+startGame();
 </script>
 </body>
 </html>
