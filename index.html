@@ -426,14 +426,13 @@ function testCurrentBrain() {
   document.getElementById("trainingStatus").textContent = 
   "Current network caught " + result.catches + " of 20 apples.";
 }
-
-if (generation === 0) {
-  document.getElementById("challengeStatus").textContent =
-    "Load a trained AI or train one before starting a challenge.";
-  return;
-}
-
 function startChallenge() {
+  if (generation === 0) {
+    document.getElementById("challengeStatus").textContent =
+      "Load a trained AI or train one before starting a challenge.";
+    return;
+  }
+
   const wasGameOver = lives === 0;
   challengeDrops = null;
 document.getElementById("challengeStatus").textContent =
