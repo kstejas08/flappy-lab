@@ -1,18 +1,108 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Flappy Lab</title>
+  <title>Catch the apple</title>
 </head>
 <body>
-  <h1>Flappy Lab</h1>
-  <p>My own fun version of Flappy bird where i train ai to play and compete along with it </p>
+  <h1>Catch the apple</h1>
+  <p>My own fun version of Catch the apple where i train ai to play and players compete along with it </p>
   <canvas id="game" width="400" height="500" style="background: skyblue;"></canvas>
   <script>
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
 
-  ctx.fillStyle = "yellow";
-  ctx.fillRect(80, 200, 25, 25);
+  let basketX = 160;
+  let appleX=190;
+  let appleY= 0;
+  let score=0;
+  let lives = 3;
+  let moveLeft = false;
+  let moveRight = false;
+
+  function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "saddlebrown";
+  ctx.fillRect(basketX,460, 80, 20);
+
+  ctx.fillStyle = "red";
+  ctx.beginPath();
+  ctx.arc(appleX, appleY, 10, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle = "black";
+  ctx.font="20px Arial";
+  ctx.fillText("Score: " + score, 15, 30);
+
+  ctx.fillText("Lives: " + lives, 290, 30);
+
+  if(lives===0) {
+    ctx.fillText("Game over! Press R to restart.", 60, 250);
+  }
+ }
+document.addEventListener("keydown", function(event) {
+  if (event.key.toLowerCase()==="r" && lives===0){
+    basketX=160;
+    score=0;
+    lives=3;
+    appleY=-10;
+    appleX=10+Math.random()*(canvas.width-20);
+    update();
+    return;
+  }
+  
+  if (lives===0){
+    return;
+  }
+  
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    moveLeft=true;
+  }
+
+  if (event.key === "ArrowRight") {
+    event.preventDefault();
+    moveRight=true;
+  }
+});
+document.addEventListener("keyup",function(event){
+  if (event.key==="ArrowLeft") moveLeft=false;
+  if (event.key==="ArrowRight") moveRight=false;
+});
+
+window.addEventListener("blur", function() {
+  moveLeft=false;
+  moveRight=false;
+})
+function update() {
+  appleY=appleY+2;
+  if (moveLeft) basketX = basketX-4;
+  if (moveRight) basketX=basketX+4;
+
+  basketX=Math.max(0, Math.min(canvas.width-80, basketX));
+  if (
+    appleY+10 >= 460 &&
+    appleY-10 <= 480 &&
+    appleX+10 >= basketX &&
+    appleX-10 <= basketX + 80
+){
+  score=score +1;
+  appleY=-10;
+  appleX=10+Math.random()*(canvas.width-20);
+}
+
+  if (appleY > canvas.height + 10) {
+    lives=lives-1;
+    appleY=-10;
+    appleX=10+Math.random()*(canvas.width-20);
+  }
+
+  draw();
+
+  if (lives>0) {
+  requestAnimationFrame(update);
+}
+}
+update();
 </script>
 </body>
 </html>
